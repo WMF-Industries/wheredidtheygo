@@ -12,17 +12,22 @@ import wheredidtheygo.ui.*;
 import static mindustry.Vars.*;
 
 public class wheredidtheygo extends Mod{
+    int setting1, setting2;
+    boolean loaded, teamExists, setting3, setting4, setting5;
+
     public wheredidtheygo(){
         Events.on(EventType.ClientLoadEvent.class, e -> {
-            Timer.schedule(() -> {
-                if(!Vars.state.isGame() || Vars.net.client()) return;
-
-                Groups.unit.each(u -> {
-                    if(u.team() != Vars.state.rules.defaultTeam
-                            && !Vars.state.rules.pvp && !u.isPlayer())
-                        u.kill();
-                });
-            }, 0, 1f);
+            GlobalConfig config = new GlobalConfig();
+            ui.hudGroup.fill(t -> {
+                t.name = "wdtg-cont";
+                t.visibility = () -> ui.minimapfrag.shown();
+                t.bottom().left();
+                t.add(config.mapTable);
+                Timer.schedule(() -> {
+                    if(state.isGame()) config.rebuildUis();
+                },0, 1);
+            });
+            loadMod();
         });
 
         Events.on(EventType.ServerLoadEvent.class, e -> {
