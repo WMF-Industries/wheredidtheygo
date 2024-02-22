@@ -12,9 +12,9 @@ import wheredidtheygo.ui.*;
 import static mindustry.Vars.*;
 
 public class wheredidtheygo extends Mod{
-    int setting1, setting2;
-    boolean loaded, teamExists, setting3, setting4, setting5;
-
+    int refreshRate, waveOffset, temp;
+    public boolean loaded, teamExists, removeEnemies, enableCapturing,
+            affectWaves, showMenu, localOverride, temp1, temp2, temp3;
     public wheredidtheygo(){
         Events.on(EventType.ClientLoadEvent.class, e -> {
             GlobalConfig config = new GlobalConfig();
@@ -24,15 +24,51 @@ public class wheredidtheygo extends Mod{
                 t.bottom().left();
                 t.add(config.mapTable);
                 Timer.schedule(() -> {
-                    if(state.isGame()) config.rebuildUis();
+                    if(state.isGame()) config.rebuildUis(enableCapturing);
                 },0, 1);
             });
+            ui.hudGroup.fill(s -> {
+                s.name = "wdtg-overrides";
+                s.visibility = () -> ui.minimapfrag.shown();
+                s.top().left().button(Core.bundle.get("wdtg-dialog-override"),
+                        ()-> overrideMenu(config, !showMenu));
+            });
+
             loadMod();
+
+            config.overrides.buttons.button("@back", () -> {
+                config.overrides.hide();
+
+                if(removeEnemies != Core.settings.getBool("wdtg-mode")
+                || enableCapturing != Core.settings.getBool("wdtg-buttons")
+                || affectWaves != Core.settings.getBool("wdtg-waves")
+                ) localOverride = true;
+
+                modifyWorld();
+            }).width(210);
+            config.overrides.cont.center().add(config.overrideTable);
+
+            Events.on(EventType.WorldLoadEvent.class, ev -> {
+                if(net.client()) return;
+                localOverride = false;
+
+                temp = state.rules.winWave;
+                temp1 = state.rules.waves;
+                temp2 = state.rules.waveSending;
+                temp3 = state.rules.waveTimer;
+
+                if(showMenu){
+                    overrideMenu(config, true);
+                    return;
+                }
+
+                modifyWorld();
+            });
         });
 
         Events.on(EventType.ServerLoadEvent.class, e -> {
-            netServer.clientCommands.<Player>register("capture", "<units> <buildings> <team>", "Captures specified content (true/false) from the specified team (all teams if blank)", (args, player) ->{
-                if(setting4){
+            netServer.clientCommands.<Player>register("capture", "<units> <buildings> [team]", "Captures specified content (true/false) from the specified team (all teams if blank)", (args, player) ->{
+                if(enableCapturing){
                     if(!state.rules.pvp){
                         if(player.admin){
                             if((args[0].equals("false") && args[1].equals("false")) || (args[0].isEmpty())){
@@ -74,9 +110,7 @@ public class wheredidtheygo extends Mod{
                                 state.teams.updateTeamStats();
 
                                 data.each(t -> {
-                                    if(t.buildings.size > 0){
-                                        capture(data);
-                                    }
+                                    if(t.buildings.size > 0) capture(data);
                                 });
                             }
 
@@ -87,11 +121,8 @@ public class wheredidtheygo extends Mod{
                 }else player.sendMessage("[lightgray]Command disabled by the server administration!");
             });
             loadMod();
-        });
 
-        Events.on(EventType.WorldLoadEvent.class, e -> {
-            if(net.client()) return;
-            modifyWorld();
+            Events.on(EventType.WorldLoadEvent.class, ev -> modifyWorld());
         });
     }
 
@@ -104,9 +135,7 @@ public class wheredidtheygo extends Mod{
         state.teams.updateTeamStats();
 
         data.each(t -> {
-            if(t.buildings.size > 0){
-                capture(data);
-            }
+            if(t.buildings.size > 0) capture(data);
         });
     }
 
@@ -116,49 +145,66 @@ public class wheredidtheygo extends Mod{
             return;
         }
 
-        if(setting3){
-            Groups.build.each(b -> {
-                if (b.team() != state.rules.defaultTeam
-                        && b instanceof UnitFactory.UnitFactoryBuild
-                        || b instanceof Reconstructor.ReconstructorBuild)
-                    b.enabled = false;
-            });
-        }
+        Groups.build.each(b -> {
+            if(b.team() != state.rules.defaultTeam
+            && b instanceof UnitFactory.UnitFactoryBuild
+            || b instanceof Reconstructor.ReconstructorBuild)
+            b.enabled = !removeEnemies;
+        });
 
-        if(setting5){
+        if(affectWaves){
             if(state.rules.winWave > 0){
-                state.rules.winWave = Math.max(state.rules.winWave - setting2, 1);
-            }else{
-                state.rules.waveSending = state.rules.waves = state.rules.waveTimer = false;
-            }
+                state.rules.winWave = Math.max(state.rules.winWave - waveOffset, 1);
+            }else state.rules.waveSending = state.rules.waves = state.rules.waveTimer = false;
+        }else{
+            state.rules.winWave = temp;
+            state.rules.waves = temp1;
+            state.rules.waveSending = temp2;
+            state.rules.waveTimer = temp3;
         }
     }
 
     public void loadMod(){
         if(!headless){
             Log.info(Core.bundle.get("wdtg-log-message"));
+            refreshRate = Core.settings.getInt("wdtg-refresh-rate");
             Timer.schedule(() -> {
-                setting1 = Core.settings.getInt("wdtg-refresh-rate");
-                setting2 = Core.settings.getInt("wdtg-wave-offset");
-                setting3 = Core.settings.getBool("wdtg-mode");
-                setting4 = Core.settings.getBool("wdtg-buttons");
-                setting5 = Core.settings.getBool("wdtg-waves");
+                showMenu = Core.settings.getBool("wdtg-override");
+                if(showMenu && localOverride) return;
+
+                waveOffset = Core.settings.getInt("wdtg-wave-offset");
+                removeEnemies = Core.settings.getBool("wdtg-mode");
+                enableCapturing = Core.settings.getBool("wdtg-buttons");
+                affectWaves = Core.settings.getBool("wdtg-waves");
             },0, 2.5f);
         }else{
-            setting1 = 1;
-            setting2 = 0;
-            setting3 = setting4 = setting5 = true;
+            refreshRate = 1;
+            waveOffset = 0;
+            removeEnemies = enableCapturing = affectWaves = true;
         }
 
         Timer.schedule(() -> {
-            if(!setting3 && (!state.isGame() || net.client())) return;
+            if(!removeEnemies || !state.isGame() || net.client()) return;
 
             Groups.unit.each(u -> {
                 if (u.team() != state.rules.defaultTeam
                 && !state.rules.pvp && !u.isPlayer()) u.kill();
             });
-        }, 0, (float) 1 / setting1);
+        }, 0, (float) 1 / refreshRate);
 
         loaded = true;
+    }
+
+    public void overrideMenu(GlobalConfig cfg, boolean newInstance){
+        if(newInstance){
+            cfg.overrideTable.reset();
+            cfg.overrideTable.clear();
+
+            cfg.overrideTable.row().check(Core.bundle.get("setting.wdtg-mode.name"), removeEnemies, (checked) -> removeEnemies = checked);
+            cfg.overrideTable.row().check(Core.bundle.get("setting.wdtg-buttons.name"), enableCapturing, (checked) -> enableCapturing = checked);
+            cfg.overrideTable.row().check(Core.bundle.get("setting.wdtg-waves.name"), affectWaves, (checked) -> affectWaves = checked);
+        }
+
+        cfg.overrides.show();
     }
 }
