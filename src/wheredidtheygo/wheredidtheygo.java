@@ -31,7 +31,7 @@ public class wheredidtheygo extends Mod{
                 s.name = "wdtg-overrides";
                 s.visibility = () -> ui.minimapfrag.shown();
                 s.top().left().button(Core.bundle.get("wdtg-dialog-override"),
-                        ()-> overrideMenu(config, !showMenu));
+                ()-> overrideMenu(config, !showMenu)).width(160f).height(80f);
             });
 
             loadMod();

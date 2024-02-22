@@ -64,7 +64,7 @@ public class GlobalConfig{
         textTable.reset();
         textTable.clear();
 
-        textTable.add(Core.bundle.get("wdtg-select-message") + " " + selectedTeam.coloredName());
+        textTable.add(Core.bundle.get("wdtg-select-message") + " " + (selectedTeam == Team.derelict ? Core.bundle.get("wdtg-select-message-any") : selectedTeam.coloredName()));
 
         teamsTable.reset();
         teamsTable.clear();
