@@ -6,15 +6,17 @@ import arc.util.*;
 import mindustry.game.*;
 import mindustry.gen.*;
 import mindustry.mod.*;
+import mindustry.world.blocks.storage.*;
 import mindustry.world.blocks.units.*;
 import wheredidtheygo.ui.*;
 
 import static mindustry.Vars.*;
 
 public class wheredidtheygo extends Mod{
-    int refreshRate, waveOffset, temp;
     public boolean loaded, teamExists, removeEnemies, enableCapturing,
             affectWaves, showMenu, localOverride, temp1, temp2, temp3;
+    int refreshRate, waveOffset, temp;
+    Team captureTeam;
     public wheredidtheygo(){
         Events.on(EventType.ClientLoadEvent.class, e -> {
             GlobalConfig config = new GlobalConfig();
@@ -31,7 +33,7 @@ public class wheredidtheygo extends Mod{
                 s.name = "wdtg-overrides";
                 s.visibility = () -> ui.minimapfrag.shown();
                 s.top().left().button(Core.bundle.get("wdtg-dialog-override"),
-                ()-> overrideMenu(config, !showMenu)).width(160f).height(80f);
+                ()-> overrideMenu(config, !localOverride)).width(160f).height(80f);
             });
 
             loadMod();
@@ -39,17 +41,13 @@ public class wheredidtheygo extends Mod{
             config.overrides.buttons.button("@back", () -> {
                 config.overrides.hide();
 
-                if(removeEnemies != Core.settings.getBool("wdtg-mode")
-                || enableCapturing != Core.settings.getBool("wdtg-buttons")
-                || affectWaves != Core.settings.getBool("wdtg-waves")
-                ) localOverride = true;
-
                 modifyWorld();
             }).width(210);
             config.overrides.cont.center().add(config.overrideTable);
 
             Events.on(EventType.WorldLoadEvent.class, ev -> {
                 if(net.client()) return;
+
                 localOverride = false;
 
                 temp = state.rules.winWave;
@@ -102,15 +100,36 @@ public class wheredidtheygo extends Mod{
                             }
 
                             if(args[1].equals("true")){
+                                state.rules.coreDestroyClear = false;
+                                captureTeam = player.team();
+                                Seq<Building> ret = new Seq<>();
                                 data.each(t -> t.buildings.each(b -> {
                                     b.remove();
                                     b.tile.setNet(b.block(), player.team(), b.rotation());
+
+                                    if(!b.block().update || b.tile.team() != player.team()) return;
+                                    // no config or not replaced yet
+
+                                    if(b.block() instanceof CoreBlock){
+                                        if(b.team == captureTeam) return;
+                                        captureTeam = b.team;
+                                    } // cores should only transfer items once
+
+                                    b.tile.build.configure(b.config());
+                                    if(b.block().hasLiquids && b.liquids.current() != null){
+                                        b.liquids.each((l, a) -> {
+                                            b.tile.build.liquids.add(l, a);
+                                        }); // if anyone wonders why liquids first, reactors.
+                                    }
+                                    if(b.block().hasItems && b.items.any()) b.tile.build.items.add(b.items());
                                 }));
 
                                 state.teams.updateTeamStats();
 
                                 data.each(t -> {
-                                    if(t.buildings.size > 0) capture(data);
+                                    if(t.buildings.size > 0){
+                                        capture(data, player);
+                                    }
                                 });
                             }
 
@@ -126,16 +145,34 @@ public class wheredidtheygo extends Mod{
         });
     }
 
-    public void capture(Seq<Teams.TeamData> data){ // TODO: This will put heavy load on the cpu and might leak, replace later on
+    public void capture(Seq<Teams.TeamData> data, Player player){ // TODO: This will put heavy load on the cpu and might leak, replace later on
+        Seq<Building> ret = new Seq<>();
         data.each(t -> t.buildings.each(b -> {
             b.remove();
             b.tile.setNet(b.block(), player.team(), b.rotation());
+
+            if(!b.block().update || b.tile.team() != player.team()) return;
+
+            if(b.block() instanceof CoreBlock){
+                if(b.team == captureTeam) return;
+                captureTeam = b.team;
+            }
+
+            b.tile.build.configure(b.config());
+            if(b.block().hasLiquids && b.liquids.current() != null){
+                b.liquids.each((l, a) -> {
+                    b.tile.build.liquids.add(l, a);
+                });
+            }
+            if(b.block().hasItems && b.items.any()) b.tile.build.items.add(b.items());
         }));
 
         state.teams.updateTeamStats();
 
         data.each(t -> {
-            if(t.buildings.size > 0) capture(data);
+            if(t.buildings.size > 0) {
+                capture(data, player);
+            }
         });
     }
 
@@ -148,8 +185,7 @@ public class wheredidtheygo extends Mod{
         Groups.build.each(b -> {
             if(b.team() != state.rules.defaultTeam
             && b instanceof UnitFactory.UnitFactoryBuild
-            || b instanceof Reconstructor.ReconstructorBuild)
-            b.enabled = !removeEnemies;
+            || b instanceof Reconstructor.ReconstructorBuild) b.enabled = !removeEnemies;
         });
 
         if(affectWaves){
@@ -169,9 +205,9 @@ public class wheredidtheygo extends Mod{
             Log.info(Core.bundle.get("wdtg-log-message"));
             refreshRate = Core.settings.getInt("wdtg-refresh-rate");
             Timer.schedule(() -> {
-                showMenu = Core.settings.getBool("wdtg-override");
-                if(showMenu && localOverride) return;
+                if(localOverride) return;
 
+                showMenu = Core.settings.getBool("wdtg-override");
                 waveOffset = Core.settings.getInt("wdtg-wave-offset");
                 removeEnemies = Core.settings.getBool("wdtg-mode");
                 enableCapturing = Core.settings.getBool("wdtg-buttons");
@@ -184,11 +220,12 @@ public class wheredidtheygo extends Mod{
         }
 
         Timer.schedule(() -> {
-            if(!removeEnemies || !state.isGame() || net.client()) return;
+            if(!removeEnemies || !state.isGame()
+            || state.rules.pvp || net.client()) return;
 
             Groups.unit.each(u -> {
                 if (u.team() != state.rules.defaultTeam
-                && !state.rules.pvp && !u.isPlayer()) u.kill();
+                && !u.isPlayer()) u.kill();
             });
         }, 0, (float) 1 / refreshRate);
 
@@ -200,9 +237,18 @@ public class wheredidtheygo extends Mod{
             cfg.overrideTable.reset();
             cfg.overrideTable.clear();
 
-            cfg.overrideTable.row().check(Core.bundle.get("setting.wdtg-mode.name"), removeEnemies, (checked) -> removeEnemies = checked);
-            cfg.overrideTable.row().check(Core.bundle.get("setting.wdtg-buttons.name"), enableCapturing, (checked) -> enableCapturing = checked);
-            cfg.overrideTable.row().check(Core.bundle.get("setting.wdtg-waves.name"), affectWaves, (checked) -> affectWaves = checked);
+            cfg.overrideTable.row().check(Core.bundle.get("setting.wdtg-mode.name"), removeEnemies, (checked) -> {
+                removeEnemies = checked;
+                localOverride = true;
+            });
+            cfg.overrideTable.row().check(Core.bundle.get("setting.wdtg-buttons.name"), enableCapturing, (checked) -> {
+                enableCapturing = checked;
+                localOverride = true;
+            });
+            cfg.overrideTable.row().check(Core.bundle.get("setting.wdtg-waves.name"), affectWaves, (checked) -> {
+                affectWaves = checked;
+                localOverride = true;
+            });
         }
 
         cfg.overrides.show();
