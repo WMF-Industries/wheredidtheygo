@@ -1,7 +1,6 @@
 package wheredidtheygo.ui;
 
 import arc.*;
-import arc.graphics.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
@@ -18,10 +17,13 @@ public class GlobalConfig{
     public Table mapTable = new Table(), teamsTable = new Table(), textTable = new Table(), overrideTable = new Table();
     public BaseDialog teamSelect = new BaseDialog(Core.bundle.get("wdtg-dialog")),
             overrides = new BaseDialog(Core.bundle.get("wdtg-dialog-override"));
-    public Team selectedTeam = Team.derelict, captureTeam;
-    String data;
+    public Team selectedTeam = Team.derelict, captureTeam, paramTeam;
+    String data, playerName, capUnit, capBlock, capAll, teamSelector,
+    msgCap, msgBuild, msgUnit, msgAnd, msgFrom, msgTeams, msgEmpty,
+    msgSelect, msgAny, msgReq, msgSent, warnHost, warnPvp, warnPerms;
     Seq<Teams.TeamData> teamCache = new Seq<>();
-    boolean stateCache, firstRun;
+    boolean stateCache, updateButtons, firstRun, validHost;
+    int count;
 
     public GlobalConfig(){
         ui.settings.addCategory(Core.bundle.get("wdtg-category"), Icon.box, t ->{
@@ -33,6 +35,7 @@ public class GlobalConfig{
             subTable.checkPref("wdtg-mode", true);
             subTable.sliderPref("wdtg-refresh-rate", 1, 1, 10, 1, s -> s + Strings.format(" time@ per second", s > 1 ? "s" : ""));
             subTable.checkPref("wdtg-buttons", true);
+            subTable.checkPref("wdtg-direct", false);
 
             t.add(subTable);
         });
@@ -41,42 +44,107 @@ public class GlobalConfig{
         teamSelect.cont.center().top().add(textTable);
         teamSelect.buttons.center().bottom().row().add(teamsTable);
 
+        netClient.addPacketHandler("wdtg-true", p -> validHost = true);
+        netServer.addPacketHandler("wdtg-check", (p, s) -> Call.clientPacketReliable(p.con(), "wdtg-true", ""));
+        netServer.addPacketHandler("wdtg-req", (p, s) -> {
+            String[] params = s.split(" ");
+            playerName = p.coloredName();
+            boolean multi = params[0].equals("true"), alternate = params[1].equals("true");
+            if(!params[2].equals("derelict")){
+                state.teams.present.each(t -> {
+                    if (t.team.name.equals(params[2])) paramTeam = t.team;
+                });
+            }else paramTeam = Team.derelict;
+
+            if(Core.settings.getBool("wdtg-direct") && p.admin()){
+                capture(multi, alternate, true, paramTeam);
+            }else{
+                StringBuilder build = new StringBuilder();
+                String name = paramTeam.coloredName().isEmpty() ? getName(paramTeam) : paramTeam.coloredName();
+
+                build.append(playerName).append("[] ").append(msgReq).append(" ");
+                build.append(alternate ? msgBuild : msgUnit).append(" ");
+                if(multi) build.append(msgAnd).append(" ").append(!alternate ? msgBuild : msgUnit).append(" ");
+                build.append(msgFrom).append(" ").append(paramTeam == Team.derelict ? msgTeams : name);
+
+                ui.hudfrag.showToast(Icon.players, build.toString());
+
+                build.setLength(0);
+                playerName = "";
+            }
+        });
+
         Events.on(EventType.WorldLoadEvent.class, e -> {
+            validHost = false;
+            if(net.client()) Call.serverPacketReliable("wdtg-check", "");
+
             selectedTeam = Team.derelict;
             teamCache.clear();
             firstRun = true;
         });
+
+        // load strings here and keep them in ram instead of looking through the bundle every single time
+        capUnit = Core.bundle.get("wdtg-cap-unit");
+        capBlock = Core.bundle.get("wdtg-cap-block");
+        capAll = Core.bundle.get("wdtg-cap-all");
+        teamSelector = Core.bundle.get("wdtg-team-selector");
+        msgCap = Core.bundle.get("wdtg-capture-message");
+        msgBuild = Core.bundle.get("wdtg-capture-message-blocks");
+        msgUnit = Core.bundle.get("wdtg-capture-message-units");
+        msgAnd = Core.bundle.get("wdtg-capture-message-and");
+        msgFrom = Core.bundle.get("wdtg-capture-message-from");
+        msgTeams = Core.bundle.get("wdtg-capture-message-extra");
+        msgEmpty = Core.bundle.get("wdtg-capture-message-empty");
+        msgSelect = Core.bundle.get("wdtg-select-message");
+        msgAny = Core.bundle.get("wdtg-select-message-any");
+        msgReq = Core.bundle.get("wdtg-capture-request");
+        msgSent = Core.bundle.get("wdtg-capture-request-sent");
+        warnHost = Core.bundle.get("wdtg-vanilla-host-warn");
+        warnPvp = Core.bundle.get("wdtg-pvp-warn");
+        warnPerms = Core.bundle.get("wdtg-capture-request-warn");
     }
 
     public void rebuildUis(boolean enabled){
-        if(valid(teamCache) && enabled == stateCache) return;
-        stateCache = enabled;
-
-        teamCache.clear();
-        teamCache.addAll(state.teams.present);
+        if(valid(teamCache)
+        && enabled == stateCache
+        && !updateButtons) return;
 
         mapTable.reset();
         mapTable.clear();
 
         mapTable.visibility = () -> ui.minimapfrag.shown() && (enabled && !state.rules.pvp);
-        if(state.rules.pvp) ui.hudfrag.showToast(Icon.warning, "[scarlet]" + Core.bundle.get("wdtg-pvp-warn"));
+        if(state.rules.pvp) ui.hudfrag.showToast(Icon.infoCircle, "[scarlet]" + warnPvp);
 
-        mapTable.button(Core.bundle.get("wdtg-cap-unit"), Icon.units, Styles.squareTogglet, ()->{
+        mapTable.button(capUnit, Icon.units, Styles.squareTogglet, ()->{
             capture(false, false, true, selectedTeam);
+            updateButtons = true;
         }).width(180f).height(60f).margin(12f).checked(false).row();
 
-        mapTable.button(Core.bundle.get("wdtg-cap-block"), Icon.box, Styles.squareTogglet, ()->{
+        mapTable.button(capBlock, Icon.box, Styles.squareTogglet, ()->{
             capture(false, true, true, selectedTeam);
+            updateButtons = true;
         }).width(180f).height(60f).margin(12f).checked(false).row();
 
-        mapTable.button(Core.bundle.get("wdtg-cap-all"), Icon.list, Styles.squareTogglet, ()->{
+        mapTable.button(capAll, Icon.list, Styles.squareTogglet, ()->{
             capture(true, false, true, selectedTeam);
+            updateButtons = true;
         }).width(180f).height(60f).margin(12f).checked(false).row();
 
-        mapTable.button(Core.bundle.get("wdtg-team-selector"), Icon.settings, Styles.squareTogglet, ()->{
+        mapTable.button(teamSelector, Icon.settings, Styles.squareTogglet, ()->{
             updateSelect();
             teamSelect.show();
+            updateButtons = true;
         }).width(180f).height(60f).margin(12f).checked(false).row();
+
+        if(updateButtons){
+            updateButtons = false;
+            return;
+        }
+
+        stateCache = enabled;
+
+        teamCache.clear();
+        teamCache.addAll(state.teams.present);
 
         teamsTable.reset();
         teamsTable.clear();
@@ -89,7 +157,7 @@ public class GlobalConfig{
         state.teams.present.each(t -> {
             if(t.team != player.team() && t.team != Team.derelict){
                 if(t.team.coloredName().isEmpty()){
-                    data = color(t.team.color) + "#" + t.team.id;
+                    data = getName(t.team);
                 }else{
                     data = t.team.coloredName();
                 }
@@ -106,12 +174,15 @@ public class GlobalConfig{
         textTable.reset();
         textTable.clear();
 
-        textTable.add(Core.bundle.get("wdtg-select-message") + " " + (selectedTeam == Team.derelict ? Core.bundle.get("wdtg-select-message-any") : selectedTeam.coloredName()));
+        textTable.add(msgSelect + " " + (selectedTeam == Team.derelict ? msgAny : selectedTeam.coloredName()));
     }
 
     private void capture(boolean multi, boolean alternate, boolean notify, Team team){
         if(net.client()){
-            ui.hudfrag.showToast("[scarlet]" + Core.bundle.get("wdtg-client-warn"));
+            if(validHost){
+                Call.serverPacketReliable("wdtg-req", Strings.format("@ @ @", multi, alternate, team));
+                ui.hudfrag.showToast(msgSent);
+            }else ui.hudfrag.showToast(Icon.cancel, "[scarlet]" + warnHost);
             return;
         }
 
@@ -123,20 +194,27 @@ public class GlobalConfig{
         Seq<Teams.TeamData> data = new Seq<>();
         ObjectSet<Team> teams = new ObjectSet<>();
         state.teams.present.each(t -> {
-            if(t.team != player.team() && (t.team == team || team == Team.derelict)){
+            count = 0;
+            t.buildings.each(b -> {
+                if(b.block().privileged && !b.block.targetable) ++count;
+            });
+            if(t.team != player.team() && (t.buildings.size > count
+            || t.units.size != 0) && (t.team == team || team == Team.derelict)){
                 data.add(t);
                 teams.add(t.team);
             }
         });
 
         if(data.isEmpty()){
-            ui.hudfrag.showToast("[yellow]" + Core.bundle.get("wdtg-capture-message-empty"));
+            if(notify) ui.hudfrag.showToast(Icon.warning, "[yellow]" + msgEmpty);
             return;
         }
 
         if(multi || alternate){
-            Seq<Building> ret = new Seq<>();
             data.each(t -> t.buildings.each(b -> {
+                if(b.block().privileged && !b.block.targetable) return;
+                // filter out world logic stuff
+
                 b.remove();
                 b.tile.setNet(b.block(), player.team(), b.rotation());
 
@@ -161,7 +239,7 @@ public class GlobalConfig{
 
             data.each(t -> {
                 // TODO: This will put heavy load on the cpu and might leak
-                if(t.buildings.size > 0) {
+                if(t.buildings.size > 0){
                     capture(multi, alternate, false, team);
                 }
             });
@@ -169,36 +247,38 @@ public class GlobalConfig{
 
         if(multi || !alternate){
             Groups.unit.each(u -> {
-                if(teams.contains(u.team())) u.team = player.team();
+                if(teams.contains(u.team())){
+                    u.team = player.team();
+                    u.resetController();
+                }
             });
         }
 
         if(notify){
             StringBuilder build = new StringBuilder();
-            String name = team.coloredName().isEmpty() ? color(team.color) + "#" + team.id : team.coloredName(),
-            capUnits = Core.bundle.get("wdtg-capture-message-units"), capBlocks = Core.bundle.get("wdtg-capture-message-blocks");
+            String name = team.coloredName().isEmpty() ? getName(team) : team.coloredName();
 
-            build.append(Core.bundle.get("wdtg-capture-message")).append(" ");
-            build.append(alternate ? capBlocks : capUnits).append(" ");
-            if(multi) build.append(Core.bundle.get("wdtg-capture-message-and")).append(" ").append(!alternate ? capBlocks : capUnits).append(" ");
-            build.append(Core.bundle.get("wdtg-capture-message-from")).append(" ");
+            if(!playerName.isEmpty()) build.append(playerName).append("[] ");
+            build.append(msgCap).append(" ").append(alternate ? msgBuild : msgUnit).append(" ");
+            if(multi) build.append(msgAnd).append(" ").append(!alternate ? msgBuild : msgUnit).append(" ");
+            build.append(msgFrom).append(" ").append(team == Team.derelict ? msgTeams : name).append("!");
 
-            ui.hudfrag.showToast(Strings.format("@" + "@!", build.toString(),
-            teams.size > 1 ? Core.bundle.get("wdtg-capture-message-extra") : name));
+            ui.hudfrag.showToast(build.toString());
 
             build.setLength(0);
+            playerName = "";
         }
 
         data.clear();
         teams.clear();
     }
 
-    private String color(Color color){
-        return "[#" + color + "]";
+    private String getName(Team team){
+        return "[#" + team.color + "]#" + team.id;
     }
 
     private boolean valid(Seq<Teams.TeamData> seq){
-        if(seq.isEmpty()) return false;
+        if(seq.isEmpty() || seq.size != state.teams.present.size) return false;
 
         ObjectSet<Team> teams = new ObjectSet<>();
         state.teams.present.each(t -> teams.add(t.team));

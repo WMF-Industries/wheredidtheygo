@@ -15,7 +15,7 @@ import static mindustry.Vars.*;
 public class wheredidtheygo extends Mod{
     public boolean loaded, teamExists, removeEnemies, enableCapturing,
             affectWaves, showMenu, localOverride, temp1, temp2, temp3;
-    int refreshRate, waveOffset, temp;
+    int refreshRate, waveOffset, temp, count;
     Team captureTeam;
     public wheredidtheygo(){
         Events.on(EventType.ClientLoadEvent.class, e -> {
@@ -78,7 +78,12 @@ public class wheredidtheygo extends Mod{
                             Seq<Teams.TeamData> data = new Seq<>();
                             ObjectSet<Team> teams = new ObjectSet<>();
                             state.teams.present.each(t -> {
-                                if(t.team != player.team() && (t.team.name.equalsIgnoreCase(args[2]) || args[2].isEmpty())){
+                                count = 0;
+                                t.buildings.each(b -> {
+                                    if(b.block().privileged && !b.block.targetable) ++count;
+                                });
+                                if(t.team != player.team() && (t.buildings.size > count
+                                || t.units.size != 0) && (t.team.name.equalsIgnoreCase(args[2]) || args[2].isEmpty())){
                                     data.add(t);
                                     teams.add(t.team);
                                     if(t.team.name.equalsIgnoreCase(args[2])) teamExists = true;
@@ -95,15 +100,19 @@ public class wheredidtheygo extends Mod{
 
                             if(args[0].equals("true")){
                                 Groups.unit.each(u -> {
-                                    if(teams.contains(u.team())) u.team = player.team();
+                                    if(teams.contains(u.team())){
+                                        u.team = player.team();
+                                        u.resetController();
+                                    }
                                 });
                             }
 
                             if(args[1].equals("true")){
                                 state.rules.coreDestroyClear = false;
                                 captureTeam = player.team();
-                                Seq<Building> ret = new Seq<>();
                                 data.each(t -> t.buildings.each(b -> {
+                                    if(b.block().privileged && !b.block.targetable) return;
+
                                     b.remove();
                                     b.tile.setNet(b.block(), player.team(), b.rotation());
 
@@ -146,8 +155,9 @@ public class wheredidtheygo extends Mod{
     }
 
     public void capture(Seq<Teams.TeamData> data, Player player){ // TODO: This will put heavy load on the cpu and might leak, replace later on
-        Seq<Building> ret = new Seq<>();
         data.each(t -> t.buildings.each(b -> {
+            if(b.block().privileged && !b.block.targetable) return;
+
             b.remove();
             b.tile.setNet(b.block(), player.team(), b.rotation());
 
@@ -170,7 +180,11 @@ public class wheredidtheygo extends Mod{
         state.teams.updateTeamStats();
 
         data.each(t -> {
-            if(t.buildings.size > 0) {
+            count = 0;
+            t.buildings.each(b -> {
+                if(b.block().privileged && !b.block.targetable) ++count;
+            });
+            if(t.buildings.size > count){
                 capture(data, player);
             }
         });
