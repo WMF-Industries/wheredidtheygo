@@ -62,7 +62,7 @@ public class GlobalConfig{
                 StringBuilder build = new StringBuilder();
                 String name = paramTeam.coloredName().isEmpty() ? getName(paramTeam) : paramTeam.coloredName();
 
-                build.append(playerName).append("[] ").append(msgReq).append(" ");
+                build.append(playerName).append("[white] ").append(msgReq).append(" ");
                 build.append(alternate ? msgBuild : msgUnit).append(" ");
                 if(multi) build.append(msgAnd).append(" ").append(!alternate ? msgBuild : msgUnit).append(" ");
                 build.append(msgFrom).append(" ").append(paramTeam == Team.derelict ? msgTeams : name);
@@ -258,7 +258,7 @@ public class GlobalConfig{
             StringBuilder build = new StringBuilder();
             String name = team.coloredName().isEmpty() ? getName(team) : team.coloredName();
 
-            if(!playerName.isEmpty()) build.append(playerName).append("[] ");
+            if(!playerName.isEmpty()) build.append(playerName).append("[white] ");
             build.append(msgCap).append(" ").append(alternate ? msgBuild : msgUnit).append(" ");
             if(multi) build.append(msgAnd).append(" ").append(!alternate ? msgBuild : msgUnit).append(" ");
             build.append(msgFrom).append(" ").append(team == Team.derelict ? msgTeams : name).append("!");
