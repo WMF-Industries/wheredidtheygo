@@ -3,6 +3,7 @@ package wheredidtheygo;
 import arc.*;
 import arc.struct.*;
 import arc.util.*;
+import mindustry.Vars;
 import mindustry.game.*;
 import mindustry.gen.*;
 import mindustry.mod.*;
@@ -14,7 +15,7 @@ import static mindustry.Vars.*;
 
 public class wheredidtheygo extends Mod{
     public boolean loaded, teamExists, removeEnemies, enableCapturing,
-            affectWaves, showMenu, localOverride, temp1, temp2, temp3;
+    affectWaves, showMenu, localOverride, temp1, temp2, temp3;
     int refreshRate, waveOffset, temp, count;
     Team captureTeam;
     public wheredidtheygo(){
@@ -31,9 +32,10 @@ public class wheredidtheygo extends Mod{
             });
             ui.hudGroup.fill(s -> {
                 s.name = "wdtg-overrides";
-                s.visibility = () -> ui.minimapfrag.shown();
+                s.visibility = () -> ui.minimapfrag.shown() && net.server();
                 s.top().left().button(Core.bundle.get("wdtg-dialog-override"),
                 ()-> overrideMenu(config, !localOverride)).width(160f).height(80f);
+                s.button("Player Blacklist", config::blacklistMenu).left().width(100f).height(80f);
             });
 
             loadMod();
@@ -41,26 +43,34 @@ public class wheredidtheygo extends Mod{
             config.overrides.buttons.button("@back", () -> {
                 config.overrides.hide();
 
-                modifyWorld();
+                if(localOverride)
+                    modifyWorld();
             }).width(210);
             config.overrides.cont.center().add(config.overrideTable);
 
             Events.on(EventType.WorldLoadEvent.class, ev -> {
                 if(net.client()) return;
+                Log.info("Reloading WDTG settings...");
 
                 localOverride = false;
 
-                temp = state.rules.winWave;
-                temp1 = state.rules.waves;
-                temp2 = state.rules.waveSending;
-                temp3 = state.rules.waveTimer;
-
-                if(showMenu){
+                if(showMenu && state.isGame()){
                     overrideMenu(config, true);
                     return;
                 }
 
-                modifyWorld();
+                Timer.schedule(() -> {
+                    temp = state.rules.winWave;
+                    Log.info("Win Wave: " + temp);
+                    temp1 = state.rules.waves;
+                    Log.info("Waves: " + temp1);
+                    temp2 = state.rules.waveSending;
+                    Log.info("Wave Sending: " + temp2);
+                    temp3 = state.rules.waveTimer;
+                    Log.info("Wave Timer: " + temp3);
+
+                    modifyWorld();
+                }, 0.5f);
             });
         });
 
@@ -72,7 +82,7 @@ public class wheredidtheygo extends Mod{
                             if((args[0].equals("false") && args[1].equals("false")) || (args[0].isEmpty())){
                                 player.sendMessage("[scarlet]Cannot capture nothing!");
                                 return;
-                            };
+                            }
 
                             teamExists = false;
                             Seq<Teams.TeamData> data = new Seq<>();

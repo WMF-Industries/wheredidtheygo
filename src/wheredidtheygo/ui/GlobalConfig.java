@@ -6,24 +6,25 @@ import arc.struct.*;
 import arc.util.*;
 import mindustry.game.*;
 import mindustry.gen.*;
+import mindustry.graphics.*;
 import mindustry.ui.*;
 import mindustry.ui.dialogs.*;
 import mindustry.world.blocks.storage.*;
 
 import static mindustry.Vars.*;
 
-
 public class GlobalConfig{
     public Table mapTable = new Table(), teamsTable = new Table(), textTable = new Table(), overrideTable = new Table();
     public BaseDialog teamSelect = new BaseDialog(Core.bundle.get("wdtg-dialog")),
-            overrides = new BaseDialog(Core.bundle.get("wdtg-dialog-override"));
+    blacklistDialog = new BaseDialog("wdtg-blacklist"), overrides = new BaseDialog(Core.bundle.get("wdtg-dialog-override"));
     public Team selectedTeam = Team.derelict, captureTeam, paramTeam;
-    String data, playerName, capUnit, capBlock, capAll, teamSelector,
+    String data = "", playerName = "", capUnit, capBlock, capAll, teamSelector,
     msgCap, msgBuild, msgUnit, msgAnd, msgFrom, msgTeams, msgEmpty,
     msgSelect, msgAny, msgReq, msgSent, warnHost, warnPvp, warnPerms;
     Seq<Teams.TeamData> teamCache = new Seq<>();
-    boolean stateCache, updateButtons, firstRun, validHost;
+    boolean stateCache, updateButtons, firstRun, validHost, timeout;
     int count;
+    Seq<String> blacklist = new Seq<>();
 
     public GlobalConfig(){
         ui.settings.addCategory(Core.bundle.get("wdtg-category"), Icon.box, t ->{
@@ -44,7 +45,10 @@ public class GlobalConfig{
         teamSelect.cont.center().top().add(textTable);
         teamSelect.buttons.center().bottom().row().add(teamsTable);
 
-        netClient.addPacketHandler("wdtg-true", p -> validHost = true);
+        netClient.addPacketHandler("wdtg-true", s -> validHost = true);
+        netClient.addPacketHandler("wdtg-timeout", s -> {
+            ui.hudfrag.showToast(Icon.warning, "[scarlet]Server is on cooldown, please wait.");
+        });
         netServer.addPacketHandler("wdtg-check", (p, s) -> Call.clientPacketReliable(p.con(), "wdtg-true", ""));
         netServer.addPacketHandler("wdtg-req", (p, s) -> {
             String[] params = s.split(" ");
@@ -56,9 +60,14 @@ public class GlobalConfig{
                 });
             }else paramTeam = Team.derelict;
 
+            if(timeout){
+                Call.clientPacketReliable(p.con(), "wdtg-timeout0", "");
+                return;
+            }
+
             if(Core.settings.getBool("wdtg-direct") && p.admin()){
                 capture(multi, alternate, true, paramTeam);
-            }else{
+            }else{ //request message
                 StringBuilder build = new StringBuilder();
                 String name = paramTeam.coloredName().isEmpty() ? getName(paramTeam) : paramTeam.coloredName();
 
@@ -72,6 +81,9 @@ public class GlobalConfig{
                 build.setLength(0);
                 playerName = "";
             }
+
+            timeout = true;
+            Timer.schedule(() -> timeout = false, 10);
         });
 
         Events.on(EventType.WorldLoadEvent.class, e -> {
@@ -81,6 +93,15 @@ public class GlobalConfig{
             selectedTeam = Team.derelict;
             teamCache.clear();
             firstRun = true;
+
+            if(net.server())
+                blacklistMenu();
+
+            Timer.schedule(()-> {
+                updateButtons = true;
+                if(state.rules.pvp)
+                    ui.hudfrag.showToast(Icon.infoCircle, "[scarlet]" + warnPvp);
+            }, 5);
         });
 
         // load strings here and keep them in ram instead of looking through the bundle every single time
@@ -113,21 +134,36 @@ public class GlobalConfig{
         mapTable.clear();
 
         mapTable.visibility = () -> ui.minimapfrag.shown() && (enabled && !state.rules.pvp);
-        if(state.rules.pvp) ui.hudfrag.showToast(Icon.infoCircle, "[scarlet]" + warnPvp);
+
+        if(net.server()){
+            mapTable.button("Unlock Tech Tree", Icon.tree, Styles.squareTogglet, () -> {
+                if(state.isCampaign())
+                    state.getPlanet().techTree.each(n -> n.content.unlock());
+                else ui.hudfrag.showToast("[scarlet]Not playing campaign!");
+                updateButtons = true;
+            }).width(180f).height(60f).margin(12f).checked(false).row();
+
+            mapTable.button("Launch to any Sector", Icon.export, Styles.squareTogglet, () -> {
+                if(state.isCampaign())
+                    PlanetDialog.debugSelect = !PlanetDialog.debugSelect;
+                else ui.hudfrag.showToast("[scarlet]Not playing campaign!");
+                updateButtons = true;
+            }).width(180f).height(60f).margin(12f).checked(false).row();
+        }
 
         mapTable.button(capUnit, Icon.units, Styles.squareTogglet, ()->{
-            capture(false, false, true, selectedTeam);
             updateButtons = true;
+            capture(false, false, true, selectedTeam);
         }).width(180f).height(60f).margin(12f).checked(false).row();
 
         mapTable.button(capBlock, Icon.box, Styles.squareTogglet, ()->{
-            capture(false, true, true, selectedTeam);
             updateButtons = true;
+            capture(false, true, true, selectedTeam);
         }).width(180f).height(60f).margin(12f).checked(false).row();
 
         mapTable.button(capAll, Icon.list, Styles.squareTogglet, ()->{
-            capture(true, false, true, selectedTeam);
             updateButtons = true;
+            capture(true, false, true, selectedTeam);
         }).width(180f).height(60f).margin(12f).checked(false).row();
 
         mapTable.button(teamSelector, Icon.settings, Styles.squareTogglet, ()->{
@@ -212,7 +248,7 @@ public class GlobalConfig{
 
         if(multi || alternate){
             data.each(t -> t.buildings.each(b -> {
-                if(b.block().privileged && !b.block.targetable) return;
+                if(b.block().privileged && !b.block().targetable) return;
                 // filter out world logic stuff
 
                 b.remove();
@@ -238,7 +274,6 @@ public class GlobalConfig{
             state.teams.updateTeamStats();
 
             data.each(t -> {
-                // TODO: This will put heavy load on the cpu and might leak
                 if(t.buildings.size > 0){
                     capture(multi, alternate, false, team);
                 }
@@ -254,7 +289,7 @@ public class GlobalConfig{
             });
         }
 
-        if(notify){
+        if(notify){ //capture message
             StringBuilder build = new StringBuilder();
             String name = team.coloredName().isEmpty() ? getName(team) : team.coloredName();
 
@@ -290,5 +325,32 @@ public class GlobalConfig{
         }
 
         return true;
+    }
+
+    public void blacklistMenu(){
+        if(net.active())
+
+        blacklistDialog.clear();
+        blacklistDialog.defaults();
+        blacklistDialog.addCloseButton();
+        blacklistDialog.buttons.button("clear", () -> blacklist.clear());
+
+        blacklistDialog.table(t -> {
+            Groups.player.each(p -> t.button(p.unit().type().emoji() + " " + p.coloredName(), Styles.squareTogglet, () -> {
+                if(blacklist.contains(p.uuid())) ui.showConfirm("unblacklist", p.uuid(), () -> blacklist.remove(p.uuid()));
+                else ui.showConfirm("blacklist", p.uuid(), () -> blacklist.add(p.uuid()));
+            }).width(100 + (p.name.length() * 3)).height(60).center().row());
+
+            t.row();
+            t.image().color(Pal.accent).height(3f).padRight(100f).padBottom(20);
+            t.row();
+
+            blacklist.each(l -> {
+                if(Groups.player.contains(p -> !p.uuid().equals(l))) return;
+                t.button(l, Styles.squareTogglet, () -> ui.showConfirm("unban", l, () -> blacklist.remove(l)));
+            });
+        });
+
+        blacklistDialog.show();
     }
 }
