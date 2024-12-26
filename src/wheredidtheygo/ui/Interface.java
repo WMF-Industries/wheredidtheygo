@@ -60,24 +60,31 @@ public class Interface{
     }
 
     public void rebuildUis(boolean enabled){
-        if(valid(teamCache) && enabled == stateCache) return;
+        if(valid(teamCache) && enabled == stateCache && !updateButtons) return;
 
         mapTable.reset();
         mapTable.clear();
 
         mapTable.visibility = () -> ui.minimapfrag.shown() && (enabled && !state.rules.pvp);
 
-        if(net.server()){
-            mapTable.button("Unlock Tech Tree", Icon.tree, Styles.defaultt, () -> {
+        if(!net.active() || net.server()){
+            mapTable.button(Core.bundle.get("wdtg-unlock-tech"), Icon.tree, Styles.defaultt, () -> {
                 if(state.isCampaign())
                     state.getPlanet().techTree.each(n -> n.content.unlock());
-                else ui.hudfrag.showToast("[scarlet]Not playing campaign!");
+                else warnToast(Core.bundle.get("wdtg-campaign"));
             }).width(180f).height(60f).margin(12f).checked(false).row();
 
-            mapTable.button("Launch to any Sector", Icon.export, Styles.defaultt, () -> {
+            mapTable.button(Core.bundle.get("wdtg-reset-tech"), Icon.lock, Styles.defaultt, () -> {
                 if(state.isCampaign())
+                    state.getPlanet().techTree.each(n -> n.content.clearUnlock());
+                else warnToast(Core.bundle.get("wdtg-campaign"));
+            }).width(180f).height(60f).margin(12f).checked(false).row();
+
+            mapTable.button(getColor(PlanetDialog.debugSelect) + Core.bundle.get("wdtg-launch-anywhere"), Icon.export, Styles.defaultt, () -> {
+                if(state.isCampaign()){
                     PlanetDialog.debugSelect = !PlanetDialog.debugSelect;
-                else ui.hudfrag.showToast("[scarlet]Not playing campaign!");
+                    updateButtons = true;
+                }else warnToast(Core.bundle.get("wdtg-campaign"));
             }).width(180f).height(60f).margin(12f).checked(false).row();
         }
 
@@ -135,6 +142,10 @@ public class Interface{
         textTable.clear();
 
         textTable.add(Strings.format(Core.bundle.get("wdtg-select-message"), getPreferredName(selectedTeam)));
+    }
+
+    public String getColor(boolean active){
+        return active ? "[lime]" : "[scarlet]";
     }
 
     public String getPreferredName(Team team){
