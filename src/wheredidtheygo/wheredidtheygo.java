@@ -62,7 +62,7 @@ public class wheredidtheygo extends Mod{
             netClient.addPacketHandler("wdtg-timeout", s -> {
                 long val = Strings.parseLong(s, -1L);
                 addLocalTimeout(val);
-                mUI.warnToast(Strings.format(Core.bundle.get("wdtg-timeout"), val / 1000));
+                mUI.warnToast(Strings.format(Core.bundle.get("wdtg-cooldown"), val / 1000));
             });
         });
 

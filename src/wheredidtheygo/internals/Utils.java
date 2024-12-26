@@ -58,7 +58,7 @@ public class Utils{
 
     public static boolean capture(boolean full, boolean units, Team team){
         if(net.client()){
-            if(validHost){
+            if(validHost && getLocalTimeout() <= 0){
                 Call.serverPacketReliable("wdtg-req", Strings.format("@-@-@", full, units, team != null ? team.id : -1));
                 mUI.toast(Core.bundle.get("wdtg-request-sent"));
             }else mUI.warnToast(Core.bundle.get("wdtg-vanilla-host"));
@@ -146,6 +146,9 @@ public class Utils{
     }
 
     public static boolean hasTimeout(Player p){
+        if(getTimeout(p.uuid()) > 0)
+            return true;
+
         if(Time.millis() - packetTimes.get(p.uuid(), 0L) > 5000L){
             packets.remove(p.uuid());
             packets.put(p.uuid(), 0);
