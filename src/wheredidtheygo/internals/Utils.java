@@ -122,7 +122,7 @@ public class Utils{
     }
 
     public static long getLocalTimeout(){
-        return timeouts.get(player.uuid());
+        return timeouts.get(player.uuid(), -1L);
     }
 
     public static long addTimeout(String data){
