@@ -127,7 +127,11 @@ public class Utils{
     }
 
     public static long getLocalTimeout(){
-        return timeouts.get(player.uuid(), -1L);
+        long timeout = timeouts.get(player.uuid(), -1L) - Time.millis();
+        if(timeout <= 0)
+            timeouts.remove(player.uuid());
+
+        return timeout;
     }
 
     public static long addTimeout(String data){
