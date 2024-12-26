@@ -58,7 +58,12 @@ public class Utils{
 
     public static boolean capture(boolean full, boolean units, Team team){
         if(net.client()){
-            if(validHost && getLocalTimeout() <= 0){
+            if(getLocalTimeout() >= 0){
+                mUI.warnToast(Strings.format(Core.bundle.get("wdtg-cooldown"), getLocalTimeout() / 1000));
+                return false;
+            }
+
+            if(validHost){
                 Call.serverPacketReliable("wdtg-req", Strings.format("@-@-@", full, units, team != null ? team.id : -1));
                 mUI.toast(Core.bundle.get("wdtg-request-sent"));
             }else mUI.warnToast(Core.bundle.get("wdtg-vanilla-host"));
