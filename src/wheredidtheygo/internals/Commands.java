@@ -9,7 +9,7 @@ import static mindustry.Vars.*;
 
 public class Commands{
     public static void init(){
-        netServer.clientCommands.<Player>register("capture", "[all?] [units?] <team>", "Captures specified content (true/false) from the specified team (all teams if blank)", (args, player) ->{
+        netServer.clientCommands.<Player>register("capture", "<all?> <units?> [team]", "Captures specified content (true/false) from the specified team (all teams if blank)", (args, player) ->{
             if(Core.settings.getBool("wdtg-capturing")){
                 if(!state.rules.pvp){
                     if((headless && player.admin) || Core.settings.getBool("wdtg-direct")){

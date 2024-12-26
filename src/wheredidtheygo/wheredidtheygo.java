@@ -44,9 +44,9 @@ public class wheredidtheygo extends Mod{
 
         Events.on(EventType.WorldLoadEvent.class, e -> {
             Utils.clear();
+            Utils.init();
 
             validHost = false;
-
             if(net.client())
                 Call.serverPacketReliable("wdtg", "");
         });

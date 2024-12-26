@@ -20,13 +20,19 @@ public class Utils{
     public static ObjectIntMap<String> packets = new ObjectIntMap<>();
     public static ObjectMap<String, Long> packetTimes = new ObjectMap<>();
 
+    static Timer.Task task;
     static boolean prevState = Core.settings.getBool("wdtg-enemies");
     static int timer = 0, refresh = 0;
     public static void init(){
-        if(state.rules.pvp) return;
+        if(state.rules.pvp || state.isEditor()) return;
 
         editFactories(!prevState);
-        Timer.schedule(() ->{
+        task = Timer.schedule(() ->{
+            if(!state.isGame()){
+                task.cancel();
+                return;
+            }
+
             if(timer++ >= Core.settings.getInt("wdtg-refresh-rate")){
                 timer = 0;
 
