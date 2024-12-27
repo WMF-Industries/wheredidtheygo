@@ -3,7 +3,7 @@ name: "wdtg"
 author: "WMF Industries & RushieWashie"
 main: "wheredidtheygo.wheredidtheygo"
 description: "Enemy units do not exist!"
-version: "1.5"
+version: "1.6"
 minGameVersion: 146
 java: true
 hidden: true

@@ -21,7 +21,7 @@ public class wheredidtheygo extends Mod{
         netServer.addPacketHandler("wdtg", (p, s) -> Call.clientPacketReliable(p.con(), "wdtg-reply", ""));
 
         netServer.addPacketHandler("wdtg-req", (p, s) -> {
-            if(hasTimeout(p))
+            if(hasTimeout(p) || state.rules.pvp)
                 return;
 
             String[] vars = s.split("-");

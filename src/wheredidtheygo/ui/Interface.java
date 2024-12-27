@@ -4,6 +4,7 @@ import arc.*;
 import arc.scene.ui.layout.*;
 import arc.struct.*;
 import arc.util.*;
+import mindustry.Vars;
 import mindustry.game.*;
 import mindustry.gen.*;
 import mindustry.ui.*;
@@ -13,7 +14,7 @@ import wheredidtheygo.internals.*;
 import static mindustry.Vars.*;
 
 public class Interface{
-    Table mapTable = new Table(), teamsTable = new Table(), textTable = new Table();
+    Table mapTableLeft = new Table(), mapTableRight = new Table(), teamsTable = new Table(), textTable = new Table();
     BaseDialog teamSelect = new BaseDialog(Core.bundle.get("wdtg-select-dialog"));
     Team selectedTeam = Team.derelict;
     Seq<Teams.TeamData> teamCache = new Seq<>();
@@ -36,8 +37,8 @@ public class Interface{
         ui.hudGroup.fill(t -> {
             t.name = "wdtg-cont";
             t.visibility = () -> ui.minimapfrag.shown();
-            t.bottom().left();
-            t.add(mapTable);
+            t.bottom().left().add(mapTableLeft);
+            t.fill(nt -> nt.bottom().right().add(mapTableRight));
             Timer.schedule(() -> {
                 if(state.isGame())
                     rebuildUis(Core.settings.getBool("wdtg-capturing"));
@@ -62,48 +63,49 @@ public class Interface{
     public void rebuildUis(boolean enabled){
         if(valid(teamCache) && enabled == stateCache && !updateButtons) return;
 
-        mapTable.reset();
-        mapTable.clear();
+        mapTableLeft.reset();
+        mapTableRight.reset();
 
-        mapTable.visibility = () -> ui.minimapfrag.shown() && (enabled && !state.rules.pvp);
+        mapTableLeft.visibility = () -> ui.minimapfrag.shown() && (enabled && !state.rules.pvp);
+        mapTableRight.visibility = () -> ui.minimapfrag.shown() && (enabled && (!net.active() || net.server()));
 
-        if(!net.active() || net.server()){
-            mapTable.button(Core.bundle.get("wdtg-unlock-tech"), Icon.tree, Styles.defaultt, () -> {
-                if(state.isCampaign())
-                    state.getPlanet().techTree.each(n -> n.content.unlock());
-                else warnToast(Core.bundle.get("wdtg-campaign"));
-            }).width(180f).height(60f).margin(12f).checked(false).row();
+        mapTableRight.button(Core.bundle.get("wdtg-unlock-tech"), Icon.tree, Styles.defaultt, () -> {
+            if(state.isCampaign())
+                state.getPlanet().techTree.each(n -> n.content.unlock());
+            else warnToast(Core.bundle.get("wdtg-campaign"));
+        }).width(180f).height(60f).margin(12f).checked(false).row();
 
-            mapTable.button(Core.bundle.get("wdtg-reset-tech"), Icon.lock, Styles.defaultt, () -> {
-                if(state.isCampaign())
-                    state.getPlanet().techTree.each(n -> n.content.clearUnlock());
-                else warnToast(Core.bundle.get("wdtg-campaign"));
-            }).width(180f).height(60f).margin(12f).checked(false).row();
+        mapTableRight.button(Core.bundle.get("wdtg-cap-sector"), Icon.home, Styles.defaultt, () -> {
+            if(state.isCampaign())
+                Call.sectorCapture();
+            else warnToast(Core.bundle.get("wdtg-campaign"));
+        }).width(180f).height(60f).margin(12f).checked(false).row();
 
-            mapTable.button(getColor(PlanetDialog.debugSelect) + Core.bundle.get("wdtg-launch-anywhere"), Icon.export, Styles.defaultt, () -> {
-                if(state.isCampaign()){
-                    PlanetDialog.debugSelect = !PlanetDialog.debugSelect;
-                    updateButtons = true;
-                }else warnToast(Core.bundle.get("wdtg-campaign"));
-            }).width(180f).height(60f).margin(12f).checked(false).row();
-        }
+        mapTableRight.button(getColor(PlanetDialog.debugSelect) + Core.bundle.get("wdtg-launch-anywhere"), Icon.export, Styles.defaultt, () -> {
+            if(state.isCampaign()){
+                PlanetDialog.debugSelect = !PlanetDialog.debugSelect;
 
-        mapTable.button(Core.bundle.get("wdtg-cap-unit"), Icon.units, Styles.defaultt, ()->{
+                updateButtons = true;
+                rebuildUis(stateCache);
+            }else warnToast(Core.bundle.get("wdtg-campaign"));
+        }).width(180f).height(60f).margin(12f).checked(false).row();
+
+        mapTableLeft.button(Core.bundle.get("wdtg-cap-unit"), Icon.units, Styles.defaultt, ()->{
             if(Utils.capture(false, true, selectedTeam))
                 toast(Strings.format(Core.bundle.get("wdtg-capture-units"), getPreferredName(selectedTeam)));
         }).width(180f).height(60f).margin(12f).checked(false).row();
 
-        mapTable.button(Core.bundle.get("wdtg-cap-build"), Icon.box, Styles.defaultt, ()->{
+        mapTableLeft.button(Core.bundle.get("wdtg-cap-build"), Icon.box, Styles.defaultt, ()->{
             if(Utils.capture(false, false, selectedTeam))
                 toast(Strings.format(Core.bundle.get("wdtg-capture-buildings"), getPreferredName(selectedTeam)));
         }).width(180f).height(60f).margin(12f).checked(false).row();
 
-        mapTable.button(Core.bundle.get("wdtg-cap-all"), Icon.list, Styles.defaultt, ()->{
+        mapTableLeft.button(Core.bundle.get("wdtg-cap-all"), Icon.list, Styles.defaultt, ()->{
             if(Utils.capture(true, false, selectedTeam))
                 toast(Strings.format(Core.bundle.get("wdtg-capture-all"), getPreferredName(selectedTeam)));
         }).width(180f).height(60f).margin(12f).checked(false).row();
 
-        mapTable.button(Core.bundle.get("wdtg-team-selector"), Icon.settings, Styles.defaultt, ()->{
+        mapTableLeft.button(Core.bundle.get("wdtg-team-selector"), Icon.settings, Styles.defaultt, ()->{
             updateSelect();
             teamSelect.show();
         }).width(180f).height(60f).margin(12f).checked(false).row();

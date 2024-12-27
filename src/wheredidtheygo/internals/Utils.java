@@ -89,6 +89,7 @@ public class Utils{
                     return;
 
                 Call.setTeam(t.build, state.rules.defaultTeam);
+                t.build.enabled(true);
             });
         }
 
