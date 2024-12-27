@@ -33,7 +33,7 @@ public class Utils{
                 return;
             }
 
-            if(timer++ >= Core.settings.getInt("wdtg-refresh-rate")){
+            if(Core.settings.getBool("wdtg-enemies") && timer++ >= Core.settings.getInt("wdtg-refresh-rate")){
                 timer = 0;
 
                 killEnemies();
