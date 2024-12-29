@@ -40,7 +40,10 @@ public class wheredidtheygo extends Mod{
         });
 
         Events.on(EventType.PlayerJoin.class, e -> packets.put(e.player.uuid(), 0));
-        Events.on(EventType.PlayerLeave.class, e -> packets.remove(e.player.uuid()));
+        Events.on(EventType.PlayerLeave.class, e -> {
+            if(e.player != null)
+                packets.remove(e.player.uuid());
+        });
 
         Events.on(EventType.WorldLoadEvent.class, e -> {
             Utils.clear();
